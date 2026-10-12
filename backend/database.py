@@ -12,7 +12,14 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'kindmeal.db')
+def get_default_db_path() -> str:
+    # On Vercel and AWS Lambda serverless runtimes, only /tmp is writable
+    if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
+        return os.path.join('/tmp', 'kindmeal.db')
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'kindmeal.db')
+
+
+DB_PATH = get_default_db_path()
 
 
 class InsufficientStockError(Exception):

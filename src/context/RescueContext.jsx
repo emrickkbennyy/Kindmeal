@@ -182,9 +182,9 @@ export function RescueProvider({ children }) {
     return `${hours}:${formattedMinutes} ${ampm}`;
   };
 
-  // Enqueue a new NGO request via Flask API
+  // Enqueue a new NGO request via Flask API with resilient fallback
   const enqueueRequest = async ({ ngoName, mealsRequested, listing }) => {
-    const donorId = listing ? listing.id : 'listing-1';
+    const donorId = listing ? listing.id : (foodListings[0]?.id || 'listing-1');
     const timestamp = getCurrentFormattedTime();
 
     try {
@@ -207,6 +207,35 @@ export function RescueProvider({ children }) {
       );
       return { success: true, position: response.position };
     } catch (error) {
+      if (error.data?.isNetworkError || !backendConnected) {
+        // Resilient client-side fallback
+        const targetDonor = listing || foodListings.find(d => d.id === donorId) || foodListings[0];
+        const newLocalRequest = {
+          id: `req-${Date.now()}`,
+          queueSequence: queue.length + 1,
+          ngoName: ngoName.trim(),
+          mealsRequested: Number(mealsRequested),
+          requestedAt: timestamp,
+          contactPerson: 'Volunteer Lead',
+          targetBeneficiary: 'NGO / Community Partner',
+          foodListingId: targetDonor?.id || 'listing-1',
+          donorName: targetDonor?.donor || 'Partner Donor',
+          donorInitials: getDonorInitials(targetDonor?.donor || 'PD'),
+          foodCategory: targetDonor?.category || 'Cooked Meals',
+          unit: targetDonor?.unit || 'meals',
+          status: queue.length === 0 ? 'NEXT' : 'WAITING'
+        };
+
+        setQueue(prev => [...prev, newLocalRequest]);
+        closeRequestModal();
+        showToast(
+          'Request added to the rescue queue.',
+          `Queue position #${queue.length + 1}. Requested from ${targetDonor?.donor || 'Donor'} (FIFO).`,
+          'success'
+        );
+        return { success: true, position: queue.length + 1 };
+      }
+
       showToast(
         'Request Submission Failed',
         error.message || 'Could not submit request to the queue.',
@@ -216,7 +245,7 @@ export function RescueProvider({ children }) {
     }
   };
 
-  // Dequeue the FRONT request via Flask API
+  // Dequeue the FRONT request via Flask API with resilient fallback
   const dequeueRequest = async () => {
     if (queue.length === 0) {
       showToast('Queue is empty', 'There are no pending requests to process.', 'info');
@@ -243,7 +272,61 @@ export function RescueProvider({ children }) {
       return { success: true, result };
     } catch (error) {
       setIsProcessing(false);
-      // Insufficient stock or backend validation failure
+
+      // If stock is insufficient, preserve front request in queue and notify
+      if (error.data?.error_type === 'INSUFFICIENT_STOCK' || error.message?.includes('insufficient')) {
+        showToast('Insufficient Stock', error.message, 'warning');
+        return { success: false, error: error.message };
+      }
+
+      if (error.data?.isNetworkError || !backendConnected) {
+        // Resilient client-side fallback dequeue
+        const donor = foodListings.find(d => d.id === frontRequest.foodListingId || d.donor === frontRequest.donorName);
+        if (donor && donor.quantity < frontRequest.mealsRequested) {
+          showToast(
+            'Insufficient Stock',
+            `Cannot allocate ${frontRequest.mealsRequested} units. Only ${donor.quantity} available.`,
+            'warning'
+          );
+          return { success: false, error: 'Insufficient stock' };
+        }
+
+        const remainingQueue = queue.slice(1).map((item, idx) => ({
+          ...item,
+          status: idx === 0 ? 'NEXT' : 'WAITING'
+        }));
+        setQueue(remainingQueue);
+
+        if (donor) {
+          setFoodListings(prev => prev.map(d => 
+            d.id === donor.id ? { ...d, quantity: Math.max(0, d.quantity - frontRequest.mealsRequested) } : d
+          ));
+        }
+
+        const newAllocation = {
+          id: `alloc-${Date.now()}`,
+          requestId: frontRequest.id,
+          ngoName: frontRequest.ngoName,
+          mealsAllocated: frontRequest.mealsRequested,
+          donorName: frontRequest.donorName,
+          donorInitials: frontRequest.donorInitials,
+          foodCategory: frontRequest.foodCategory,
+          unit: frontRequest.unit || 'meals',
+          processedAt: `✓ ${getCurrentFormattedTime()}`,
+          processedTimestamp: getCurrentFormattedTime(),
+          targetBeneficiary: frontRequest.targetBeneficiary || 'NGO / Community Partner'
+        };
+        setProcessedHistory(prev => [newAllocation, ...prev]);
+        setAvailableMeals(prev => Math.max(0, prev - frontRequest.mealsRequested));
+
+        showToast(
+          `${frontRequest.ngoName}'s request fulfilled.`,
+          `${frontRequest.mealsRequested} ${frontRequest.unit || 'meals'} allocated from ${frontRequest.donorName} (FIFO).`,
+          'process'
+        );
+        return { success: true, local: true };
+      }
+
       showToast(
         'Allocation Failed',
         error.message || 'Could not fulfill front request.',

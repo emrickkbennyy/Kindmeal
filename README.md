@@ -77,3 +77,14 @@ python backend/test_queue_and_db.py
 
 - **[`CODE_WALKTHROUGH.md`](./CODE_WALKTHROUGH.md)**: Detailed technical walkthrough of Python queue methods, database transactions, API design, and component architecture.
 - **[`VIVA_QUESTIONS.md`](./VIVA_QUESTIONS.md)**: Common viva exam questions and concise answers for college presentations.
+
+---
+
+## 7. One-Click Vercel Deployment (Unified Single Deployment)
+
+KindMeal is preconfigured for a unified single deployment on Vercel:
+- **Deployment File**: [`vercel.json`](./vercel.json) configures Vite static builds and Python Serverless function routing.
+- **Backend Function**: [`api/index.py`](./api/index.py) hosts the Flask REST API endpoints with SQLite state.
+- **Frontend SPA**: Vite builds to `dist/` and all client routes are rewritten to `index.html`.
+- **No manual environment variable configuration required**: API calls use relative paths in production with zero CORS or mixed-content issues.
+

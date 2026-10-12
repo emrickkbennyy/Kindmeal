@@ -4,7 +4,9 @@
  * and the Python Flask backend.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000';
+// In production on Vercel, relative path ('') calls the unified serverless API without CORS/mixed-content errors.
+// In local development, Vite dev proxy forwards /api to http://127.0.0.1:5000.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 class ApiError extends Error {
   constructor(message, status, data = null) {
@@ -39,9 +41,9 @@ async function request(endpoint, options = {}) {
     if (error instanceof ApiError) {
       throw error;
     }
-    // Network or connectivity error (e.g. Flask server not started)
+    // Network or connectivity error (e.g. backend server cold starting or offline)
     throw new ApiError(
-      `Cannot connect to KindMeal backend at ${API_BASE_URL}. Ensure Flask server is running.`,
+      `Cannot connect to KindMeal backend (${API_BASE_URL || 'current host'}).`,
       0,
       { isNetworkError: true }
     );

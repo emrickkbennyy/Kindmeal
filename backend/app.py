@@ -12,26 +12,44 @@ import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from database import (
-    DB_PATH,
-    DonorNotFoundError,
-    InsufficientStockError,
-    RequestAlreadyProcessedError,
-    create_request,
-    execute_allocation_transaction,
-    get_all_donors,
-    get_allocations_history,
-    get_dashboard_statistics,
-    get_donor_by_id,
-    get_pending_requests,
-    init_db,
-    reset_database_to_demo
-)
-from queue_manager import FIFOQueue
+try:
+    from database import (
+        DB_PATH,
+        DonorNotFoundError,
+        InsufficientStockError,
+        RequestAlreadyProcessedError,
+        create_request,
+        execute_allocation_transaction,
+        get_all_donors,
+        get_allocations_history,
+        get_dashboard_statistics,
+        get_donor_by_id,
+        get_pending_requests,
+        init_db,
+        reset_database_to_demo
+    )
+    from queue_manager import FIFOQueue
+except ImportError:
+    from backend.database import (
+        DB_PATH,
+        DonorNotFoundError,
+        InsufficientStockError,
+        RequestAlreadyProcessedError,
+        create_request,
+        execute_allocation_transaction,
+        get_all_donors,
+        get_allocations_history,
+        get_dashboard_statistics,
+        get_donor_by_id,
+        get_pending_requests,
+        init_db,
+        reset_database_to_demo
+    )
+    from backend.queue_manager import FIFOQueue
 
 app = Flask(__name__)
-# Enable CORS for local Vite development server
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# Enable CORS for local Vite development and production Vercel deployment
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Global in-memory FIFO Queue instance
 # Strict FIFO discipline: FRONT is served first, new arrivals enter at REAR.
@@ -55,7 +73,18 @@ init_db(DB_PATH)
 sync_queue_from_db(DB_PATH)
 
 
+@app.route('/', methods=['GET'])
+def root_index():
+    """Root status endpoint."""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'KindMeal Food Rescue API',
+        'endpoints': '/api/health, /api/donors, /api/queue, /api/requests, /api/allocations'
+    }), 200
+
+
 @app.route('/api/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint to verify backend status."""
     return jsonify({
@@ -67,6 +96,7 @@ def health_check():
 
 
 @app.route('/api/donors', methods=['GET'])
+@app.route('/donors', methods=['GET'])
 def list_donors():
     """Retrieve all food donors and their current inventory."""
     donors = get_all_donors(DB_PATH)
@@ -78,6 +108,7 @@ def list_donors():
 
 
 @app.route('/api/donors/<donor_id>', methods=['GET'])
+@app.route('/donors/<donor_id>', methods=['GET'])
 def get_donor(donor_id):
     """Retrieve details for a single donor."""
     donor = get_donor_by_id(donor_id, DB_PATH)
@@ -87,11 +118,13 @@ def get_donor(donor_id):
 
 
 @app.route('/api/queue', methods=['GET'])
+@app.route('/queue', methods=['GET'])
 def get_queue():
     """
     Get all pending requests currently in the FIFO queue.
     Returns queue with FRONT and REAR indicators.
     """
+    sync_queue_from_db(DB_PATH)
     items = fifo_queue.to_list()
     return jsonify({
         'success': True,
@@ -104,8 +137,10 @@ def get_queue():
 
 
 @app.route('/api/queue/front', methods=['GET'])
+@app.route('/queue/front', methods=['GET'])
 def get_queue_front():
     """Peek the FRONT item of the FIFO queue without dequeuing."""
+    sync_queue_from_db(DB_PATH)
     front_item = fifo_queue.peek()
     return jsonify({
         'success': True,
@@ -115,6 +150,7 @@ def get_queue_front():
 
 
 @app.route('/api/requests', methods=['POST'])
+@app.route('/requests', methods=['POST'])
 def submit_request():
     """
     Submit a new food rescue request from an NGO.
@@ -186,6 +222,7 @@ def submit_request():
 
 
 @app.route('/api/queue/process', methods=['POST'])
+@app.route('/queue/process', methods=['POST'])
 def process_front_request():
     """
     Process the FRONT request of the FIFO Queue.
@@ -197,6 +234,7 @@ def process_front_request():
     - If donor inventory is insufficient, the request is preserved in the queue
       and an informative error is returned.
     """
+    sync_queue_from_db(DB_PATH)
     if fifo_queue.is_empty():
         return jsonify({
             'success': False,
@@ -254,6 +292,7 @@ def process_front_request():
 
 
 @app.route('/api/allocations', methods=['GET'])
+@app.route('/allocations', methods=['GET'])
 def list_allocations():
     """Retrieve history of completed allocations."""
     history = get_allocations_history(DB_PATH)
@@ -265,6 +304,7 @@ def list_allocations():
 
 
 @app.route('/api/dashboard/stats', methods=['GET'])
+@app.route('/dashboard/stats', methods=['GET'])
 def get_stats():
     """Retrieve live platform statistics directly from SQLite."""
     stats = get_dashboard_statistics(DB_PATH)
@@ -275,6 +315,7 @@ def get_stats():
 
 
 @app.route('/api/demo/reset', methods=['POST'])
+@app.route('/demo/reset', methods=['POST'])
 def reset_demo():
     """
     Reset SQLite database to the clean initial demo state and
