@@ -51,7 +51,9 @@ venv.bak/
 *.cert
 
 # Database files
+*.db
 backend/*.db
+api/*.db
 *.sqlite3
 
 # Logs

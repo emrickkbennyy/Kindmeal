@@ -1,0 +1,20 @@
+# Local test database
+backend/*.db
+api/*.db
+*.sqlite3
+
+# Test suite and virtual environments
+backend/test_queue_and_db.py
+venv/
+.venv/
+env/
+
+# Python cache & logs
+__pycache__/
+*.py[cod]
+*.log
+
+# Git & editors
+.git/
+.vscode/
+.idea/

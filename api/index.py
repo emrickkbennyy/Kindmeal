@@ -1,12 +1,10 @@
 import os
 import sys
 
-# Ensure backend and root directories are resolvable
+# Ensure current directory and root are in Python path
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(CURRENT_DIR)
-BACKEND_DIR = os.path.join(ROOT_DIR, 'backend')
-
-for path in [BACKEND_DIR, ROOT_DIR]:
+for path in [CURRENT_DIR, ROOT_DIR]:
     if path not in sys.path:
         sys.path.insert(0, path)
 
